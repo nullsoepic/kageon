@@ -1,0 +1,43 @@
+{
+  "name": "kageon",
+  "version": "1.0.0",
+  "description": "A TypeScript library for generating Spotify-like song preview images using canvas on the server",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "test": "bun test",
+    "prepublishOnly": "npm run build",
+    "prepare": "npm run build"
+  },
+  "keywords": [
+    "canvas",
+    "spotify",
+    "music",
+    "preview",
+    "image-generation"
+  ],
+  "author": "nullsoepic",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nullsoepic/kageon.git"
+  },
+  "bugs": {
+    "url": "https://github.com/nullsoepic/kageon/issues"
+  },
+  "homepage": "https://github.com/nullsoepic/kageon#readme",
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "@napi-rs/canvas": "^0.1.70"
+  },
+  "files": [
+    "dist",
+    "assets"
+  ]
+}
