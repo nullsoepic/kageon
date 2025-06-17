@@ -1,3 +1,4 @@
+import path from 'path';
 import {
   createCanvas,
   loadImage,
@@ -137,7 +138,7 @@ export async function generatePreviewImage(
   ctx.fillRect(margin, margin, innerWidth, innerHeight);
 
   GlobalFonts.registerFromPath(
-    './assets/SpotifyMixUI-TitleVariable.ttf',
+    path.join(__dirname, '..', 'assets', 'SpotifyMixUI-TitleVariable.ttf'),
     'SpotifyMixUITitle'
   );
 
