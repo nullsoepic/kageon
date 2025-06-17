@@ -26,6 +26,7 @@ export interface GradientOptions {
 }
 
 export interface SongPreviewOptions {
+  mode?: 'default' | 'compact';
   gradient: GradientOptions;
   width?: number;
   height?: number;
@@ -33,6 +34,7 @@ export interface SongPreviewOptions {
     artworkUrl: string;
     name: string;
     artists: string[];
+    album?: string;
   };
   progress?: {
     showBar?: boolean;

@@ -4,23 +4,81 @@ import {
   SKRSContext2D,
   GlobalFonts,
 } from '@napi-rs/canvas';
-import type { GradientOptions } from './types';
+import type { GradientOptions, SongPreviewOptions } from './types';
 
-export interface SongPreviewOptions {
-  width?: number;
-  height?: number;
-  gradient: GradientOptions;
-  track: {
-    artworkUrl: string;
-    name: string;
-    artists: string[];
-  };
-  progress?: {
-    showBar?: boolean;
-    duration?: number;
-    elapsed?: number;
-    color?: string;
-  };
+async function drawArtwork(
+  ctx: SKRSContext2D,
+  artwork: any,
+  x: number,
+  y: number,
+  artworkSize: number
+): Promise<void> {
+  const shadowPadding = 40;
+  const offscreenCanvas = createCanvas(
+    artworkSize + shadowPadding * 2,
+    artworkSize + shadowPadding * 2
+  );
+  const offscreenCtx = offscreenCanvas.getContext('2d');
+
+  const radius = 20;
+  offscreenCtx.beginPath();
+  offscreenCtx.moveTo(shadowPadding + radius, shadowPadding);
+  offscreenCtx.arcTo(
+    shadowPadding + artworkSize,
+    shadowPadding,
+    shadowPadding + artworkSize,
+    shadowPadding + artworkSize,
+    radius
+  );
+  offscreenCtx.arcTo(
+    shadowPadding + artworkSize,
+    shadowPadding + artworkSize,
+    shadowPadding,
+    shadowPadding + artworkSize,
+    radius
+  );
+  offscreenCtx.arcTo(
+    shadowPadding,
+    shadowPadding + artworkSize,
+    shadowPadding,
+    shadowPadding,
+    radius
+  );
+  offscreenCtx.arcTo(
+    shadowPadding,
+    shadowPadding,
+    shadowPadding + artworkSize,
+    shadowPadding,
+    radius
+  );
+  offscreenCtx.closePath();
+
+  offscreenCtx.save();
+  offscreenCtx.clip();
+
+  offscreenCtx.drawImage(
+    artwork,
+    shadowPadding,
+    shadowPadding,
+    artworkSize,
+    artworkSize
+  );
+
+  offscreenCtx.restore();
+
+  const shadowCanvas = createCanvas(
+    artworkSize + shadowPadding * 2,
+    artworkSize + shadowPadding * 2
+  );
+  const shadowCtx = shadowCanvas.getContext('2d');
+
+  shadowCtx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+  shadowCtx.shadowBlur = 30;
+  shadowCtx.shadowOffsetY = 15;
+
+  shadowCtx.drawImage(offscreenCanvas, 0, 0);
+
+  ctx.drawImage(shadowCanvas, x - shadowPadding, y - shadowPadding);
 }
 
 export async function generatePreviewImage(
@@ -28,19 +86,24 @@ export async function generatePreviewImage(
 ): Promise<Buffer> {
   // Add margin to the original dimensions
   const margin = 8; // Transparent margin size (adjust as needed)
-  const width = options.width || 1920;
-  const height = options.height || 1080;
+  const {
+    mode = 'default',
+    width = 1000,
+    height = 480,
+    gradient: gradientOptions,
+    track,
+    progress: progressOptions,
+  } = options;
+
   const innerWidth = width - margin * 2;
   const innerHeight = height - margin * 2;
 
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
 
-  // Make the entire canvas transparent initially
   ctx.clearRect(0, 0, width, height);
 
-  // Create a rounded rectangle for the entire background
-  const cornerRadius = 24; // Radius for the entire image corners
+  const cornerRadius = 24;
   ctx.beginPath();
   ctx.moveTo(margin + cornerRadius, margin);
   ctx.arcTo(
@@ -61,133 +124,105 @@ export async function generatePreviewImage(
   ctx.arcTo(margin, margin, margin + innerWidth, margin, cornerRadius);
   ctx.closePath();
 
-  // Clip to this rounded rectangle
   ctx.save();
   ctx.clip();
 
-  // Draw background gradient within the clipped area
   const gradient = createGradient(
     ctx,
     innerWidth,
     innerHeight,
-    options.gradient
+    gradientOptions
   );
   ctx.fillStyle = gradient;
   ctx.fillRect(margin, margin, innerWidth, innerHeight);
 
-  // Load and draw artwork with shadow and rounded corners
-  try {
-    const artwork = await loadImage(options.track.artworkUrl);
-    const artworkSize = Math.min(innerWidth, innerHeight) * 0.6;
-    // Center in the inner area (accounting for margin)
-    const x = margin + (innerWidth - artworkSize) / 2;
-    const y = margin + (innerHeight - artworkSize) / 2;
-
-    // Create an offscreen canvas for the artwork with shadow
-    const shadowPadding = 40; // Enough space for shadow
-    const offscreenCanvas = createCanvas(
-      artworkSize + shadowPadding * 2,
-      artworkSize + shadowPadding * 2
-    );
-    const offscreenCtx = offscreenCanvas.getContext('2d');
-
-    // Draw a rounded rectangle on the offscreen canvas
-    const radius = 20;
-    offscreenCtx.beginPath();
-    offscreenCtx.moveTo(shadowPadding + radius, shadowPadding);
-    offscreenCtx.arcTo(
-      shadowPadding + artworkSize,
-      shadowPadding,
-      shadowPadding + artworkSize,
-      shadowPadding + artworkSize,
-      radius
-    );
-    offscreenCtx.arcTo(
-      shadowPadding + artworkSize,
-      shadowPadding + artworkSize,
-      shadowPadding,
-      shadowPadding + artworkSize,
-      radius
-    );
-    offscreenCtx.arcTo(
-      shadowPadding,
-      shadowPadding + artworkSize,
-      shadowPadding,
-      shadowPadding,
-      radius
-    );
-    offscreenCtx.arcTo(
-      shadowPadding,
-      shadowPadding,
-      shadowPadding + artworkSize,
-      shadowPadding,
-      radius
-    );
-    offscreenCtx.closePath();
-
-    // First clip path on offscreen canvas
-    offscreenCtx.save();
-    offscreenCtx.clip();
-
-    // Draw the image in clipped area
-    offscreenCtx.drawImage(
-      artwork,
-      shadowPadding,
-      shadowPadding,
-      artworkSize,
-      artworkSize
-    );
-
-    offscreenCtx.restore();
-
-    // Now apply shadow to the already clipped and drawn artwork
-    // Create a second offscreen canvas for the shadow effect
-    const shadowCanvas = createCanvas(
-      artworkSize + shadowPadding * 2,
-      artworkSize + shadowPadding * 2
-    );
-    const shadowCtx = shadowCanvas.getContext('2d');
-
-    // Apply shadow settings
-    shadowCtx.shadowColor = 'rgba(0, 0, 0, 0.8)';
-    shadowCtx.shadowBlur = 30;
-    shadowCtx.shadowOffsetY = 15;
-
-    // Draw the first offscreen canvas onto the shadow canvas
-    shadowCtx.drawImage(offscreenCanvas, 0, 0);
-
-    // Draw the shadow canvas onto the main canvas
-    ctx.drawImage(shadowCanvas, x - shadowPadding, y - shadowPadding);
-  } catch (err) {
-    throw new Error(
-      `Failed to load artwork: ${
-        err instanceof Error ? err.message : String(err)
-      }`
-    );
-  }
-
-  // Load font file
   GlobalFonts.registerFromPath(
     './assets/SpotifyMixUI-TitleVariable.ttf',
     'SpotifyMixUITitle'
   );
 
-  // Text styling and positioning
-  const textMargin = 48;
-  const textX = margin + textMargin;
-  const bottomMargin = 40;
-  const titleY = margin + innerHeight - bottomMargin - 32;
+  if (mode === 'compact') {
+    const artworkSize = innerHeight * 0.8;
+    const x = margin + innerWidth * 0.05;
+    const y = margin + (innerHeight - artworkSize) / 2;
 
-  // Draw song name (bold, white)
-  ctx.font = '700 28px SpotifyMixUITitle';
-  ctx.fillStyle = '#ffffff';
-  ctx.textAlign = 'left';
-  ctx.fillText(options.track.name, textX, titleY);
+    try {
+      const artwork = await loadImage(track.artworkUrl);
+      await drawArtwork(ctx, artwork, x, y, artworkSize);
+    } catch (err) {
+      throw new Error(
+        `Failed to load artwork: ${
+          err instanceof Error ? err.message : String(err)
+        }`
+      );
+    }
 
-  // Draw artists with adjusted opacity
-  ctx.font = '400 18px SpotifyMixUITitle';
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-  ctx.fillText(options.track.artists.join(', '), textX, titleY + 28);
+    const textX = x + artworkSize + innerWidth * 0.05;
+    const textY = margin + innerHeight / 2;
+
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'left';
+
+    ctx.font = '700 48px SpotifyMixUITitle';
+    ctx.fillText(track.name, textX, textY - 20);
+
+    ctx.font = '400 28px SpotifyMixUITitle';
+    if (track.album) {
+      const albumText = `${track.album} • `;
+      const albumTextMetrics = ctx.measureText(albumText);
+      const artistText = track.artists.join(', ');
+
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+      ctx.fillText(albumText, textX, textY + 40);
+
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+      ctx.fillText(artistText, textX + albumTextMetrics.width, textY + 40);
+    } else {
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+      ctx.fillText(track.artists.join(', '), textX, textY + 40);
+    }
+  } else {
+    try {
+      const artwork = await loadImage(track.artworkUrl);
+      const artworkSize = Math.min(innerWidth, innerHeight) * 0.6;
+      const x = margin + (innerWidth - artworkSize) / 2;
+      const y = margin + (innerHeight - artworkSize) / 2;
+      await drawArtwork(ctx, artwork, x, y, artworkSize);
+    } catch (err) {
+      throw new Error(
+        `Failed to load artwork: ${
+          err instanceof Error ? err.message : String(err)
+        }`
+      );
+    }
+
+    const textMargin = 48;
+    const textX = margin + textMargin;
+    const bottomMargin = 40;
+    const titleY = margin + innerHeight - bottomMargin - 32;
+
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'left';
+
+    ctx.font = '700 28px SpotifyMixUITitle';
+    ctx.fillText(track.name, textX, titleY);
+
+    ctx.font = '400 18px SpotifyMixUITitle';
+    if (track.album) {
+      const albumText = `${track.album} - `;
+      const albumTextMetrics = ctx.measureText(albumText);
+      const artistText = track.artists.join(', ');
+
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+      ctx.fillText(albumText, textX, titleY + 28);
+
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+      ctx.fillText(artistText, textX + albumTextMetrics.width, titleY + 28);
+    } else {
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+      ctx.fillText(track.artists.join(', '), textX, titleY + 28);
+    }
+  }
 
   // Draw progress bar if enabled
   if (
